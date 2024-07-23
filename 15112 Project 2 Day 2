@@ -1,0 +1,126 @@
+from cmu_graphics import *
+import cv2
+import numpy as np
+from PIL import Image
+import mediapipe as mp
+from hand_recognition2 import Net
+import torch
+from torchvision import transforms
+
+class HandDetector:
+    def __init__(self) -> None:
+        self.hands = mp.solutions.hands.Hands(static_image_mode = False, 
+                                              max_num_hands = 2, 
+                                              min_detection_confidence = 0.5)
+    
+    def detect(self, image):
+        height, width = image.shape[:2]
+        imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        landmarks = self.hands.process(imgRGB)
+        if landmarks.multi_hand_landmarks is None:
+            return np.array([])
+        lms = np.array([[[lm.x * width, lm.y * height, lm.z] for lm in landmark.landmark] for landmark in landmarks.multi_hand_landmarks])
+        return lms.astype(int)
+
+def onAppStart(app):
+    openStream(app)
+    updateImage(app)
+    app.detector = HandDetector()
+    app.gestureRecognizer = Net(4)
+    app.gestureRecognizer.load_state_dict(torch.load('bn_hand_gesture_model_500.pt'))
+    app.gestureRecognizer.eval()
+    app.hand = None
+    app.step = 0
+    app.transformer = transforms.Compose([
+                                    transforms.Grayscale(),
+                                    transforms.Resize((128, 128)),
+                                    transforms.ToTensor()
+                                ])
+    app.idToGesture = {0: 'None',
+                       1: 'Paper',
+                       2: 'Rock',
+                       3: 'Scissor'}
+
+def redrawAll(app):
+    pil_image = Image.fromarray(app.image)
+    image = CMUImage(pil_image)
+    drawImage(image, 0, 0)
+    if app.hand is not None:
+        for i in range(len(app.hand)): #Hand
+            # for j in range(len(app.hand[0])): #Point
+            #     x, y = int(app.hand[i][j][0]), int(app.hand[i][j][1])
+                # drawCircle(x, y, 10, fill = 'white')
+                # drawLabel(str(j), x, y)
+            drawRect(app.leftX - 10, app.topY - 10, app.rightX - app.leftX + 20, app.bottomY - app.topY + 20, fill = None)
+            drawLine(int(app.hand[i][0][0]), int(app.hand[i][0][1]), int(app.hand[i][1][0]), int(app.hand[i][1][1]))
+            drawLine(int(app.hand[i][1][0]), int(app.hand[i][1][1]), int(app.hand[i][2][0]), int(app.hand[i][2][1]))
+            drawLine(int(app.hand[i][2][0]), int(app.hand[i][2][1]), int(app.hand[i][3][0]), int(app.hand[i][3][1]))
+            drawLine(int(app.hand[i][3][0]), int(app.hand[i][3][1]), int(app.hand[i][4][0]), int(app.hand[i][4][1]))
+            drawLine(int(app.hand[i][0][0]), int(app.hand[i][0][1]), int(app.hand[i][5][0]), int(app.hand[i][5][1]))
+            drawLine(int(app.hand[i][5][0]), int(app.hand[i][5][1]), int(app.hand[i][6][0]), int(app.hand[i][6][1]))
+            drawLine(int(app.hand[i][6][0]), int(app.hand[i][6][1]), int(app.hand[i][7][0]), int(app.hand[i][7][1]))
+            drawLine(int(app.hand[i][7][0]), int(app.hand[i][7][1]), int(app.hand[i][8][0]), int(app.hand[i][8][1]))
+            drawLine(int(app.hand[i][5][0]), int(app.hand[i][5][1]), int(app.hand[i][9][0]), int(app.hand[i][9][1]))
+            drawLine(int(app.hand[i][9][0]), int(app.hand[i][9][1]), int(app.hand[i][10][0]), int(app.hand[i][10][1]))
+            drawLine(int(app.hand[i][10][0]), int(app.hand[i][10][1]), int(app.hand[i][11][0]), int(app.hand[i][11][1]))
+            drawLine(int(app.hand[i][11][0]), int(app.hand[i][11][1]), int(app.hand[i][12][0]), int(app.hand[i][12][1]))
+            drawLine(int(app.hand[i][9][0]), int(app.hand[i][9][1]), int(app.hand[i][13][0]), int(app.hand[i][13][1]))
+            drawLine(int(app.hand[i][13][0]), int(app.hand[i][13][1]), int(app.hand[i][14][0]), int(app.hand[i][14][1]))
+            drawLine(int(app.hand[i][14][0]), int(app.hand[i][14][1]), int(app.hand[i][15][0]), int(app.hand[i][15][1]))
+            drawLine(int(app.hand[i][15][0]), int(app.hand[i][15][1]), int(app.hand[i][16][0]), int(app.hand[i][16][1]))
+            drawLine(int(app.hand[i][13][0]), int(app.hand[i][13][1]), int(app.hand[i][17][0]), int(app.hand[i][17][1]))
+            drawLine(int(app.hand[i][0][0]), int(app.hand[i][0][1]), int(app.hand[i][17][0]), int(app.hand[i][17][1]))
+            drawLine(int(app.hand[i][17][0]), int(app.hand[i][17][1]), int(app.hand[i][18][0]), int(app.hand[i][18][1]))
+            drawLine(int(app.hand[i][18][0]), int(app.hand[i][18][1]), int(app.hand[i][19][0]), int(app.hand[i][19][1]))
+            drawLine(int(app.hand[i][19][0]), int(app.hand[i][19][1]), int(app.hand[i][20][0]), int(app.hand[i][20][1]))
+            drawLabel(app.position, app.width/2, 20, size = 20, bold = True)
+
+def onStep(app):
+    updateImage(app)
+    app.pilImage = Image.fromarray(app.image)
+    app.hand = app.detector.detect(app.image)
+    if app.hand.size > 0:
+        app.topY = float('inf')
+        app.bottomY = 0
+        app.rightX = 0
+        app.leftX = float('inf')
+        for i in range(len(app.hand)): #Hand
+            for j in range(len(app.hand[0])): #Point
+                x, y = int(app.hand[i][j][0]), int(app.hand[i][j][1])
+                if x > app.rightX:
+                    app.rightX = x
+                if x < app.leftX:
+                    app.leftX = x
+                if y > app.bottomY:
+                    app.bottomY = y
+                if y < app.topY:
+                    app.topY = y
+        app.croppedImage = app.pilImage.crop((app.leftX - 10, app.topY - 10,app.rightX + 10, app.bottomY + 10))
+        output = app.gestureRecognizer(app.transformer(app.croppedImage).unsqueeze(0))
+        app.predictions = int(torch.argmax(output.data, 1))
+        app.position = app.idToGesture[app.predictions]
+
+
+def onKeyPress(app, key):
+    if key == 'q':
+        app.quit()
+
+def openStream(app):
+    app.video = cv2.VideoCapture(0)
+    if not app.video.isOpened():
+        app.quit()
+    app.width = int(app.video.get(cv2.CAP_PROP_FRAME_WIDTH))
+    app.height = int(app.video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+def updateImage(app):
+    success, image = app.video.read()
+    if not success:
+        app.quit()
+    image = cv2.flip(image, 1)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    app.image = image
+
+def main():
+    runApp()
+
+main()

@@ -1,0 +1,126 @@
+from cmu_graphics import *
+import cv2
+import numpy as np
+from PIL import Image
+
+class faceDetector:
+    def __init__(self) -> None:
+        self.faceDetector = cv2.CascadeClassifier()
+        self.faceDetector.load('haarcascade_frontalface_alt2.xml')
+        lbfModelName = 'lbf_face_landmarks.yaml'
+        self.landmarkDetector = cv2.face.createFacemarkLBF()
+        self.landmarkDetector.loadModel(lbfModelName)
+    
+    def detect(self, image):
+        detection = self.faceDetector.detectMultiScale(image)
+        if detection is None or len(detection) == 0:
+            return []
+        _, landmarks = self.landmarkDetector.fit(cv2.cvtColor(image, cv2.COLOR_RGB2GRAY), detection)
+        return np.concatenate(landmarks, axis = 0).astype(np.int64)
+
+class Eyes:
+    def __init__(self, landmarks) -> None:
+        self.leftEyePoints = landmarks[36:42]
+        self.rightEyePoints = landmarks[42:48]
+
+    def getPositionLeft(self):
+        left, right = self.leftEyePoints[0][0], self.leftEyePoints[3][0]
+        top, bottom = (self.leftEyePoints[1][1] + self.leftEyePoints[2][1])/2, (self.leftEyePoints[4][1] + self.leftEyePoints[4][1])/2
+        centerX = (left + right)/2
+        centerY = (top + bottom)/2
+        width = right - left
+        height = bottom - top
+        return [int(centerX), int(centerY), int(width), int(height)]
+    
+    def getPositionRight(self):
+        left, right = self.rightEyePoints[0][0], self.rightEyePoints[3][0]
+        top, bottom = (self.rightEyePoints[1][1] + self.rightEyePoints[2][1])/2, (self.rightEyePoints[4][1] + self.rightEyePoints[4][1])/2
+        centerX = (left + right)/2
+        centerY = (top + bottom)/2
+        width = right - left
+        height = bottom - top
+        return [int(centerX), int(centerY), int(width), int(height)]
+
+    # def drawEyes(self, positions):
+    #     pass
+
+def onAppStart(app):
+    openStream(app)
+    updateImage(app)
+    app.detector = faceDetector()
+    app.face = None
+    app.eyes = []
+    app.googlyEyes = Image.open('googly_eye.png')
+    app.step = 0
+
+def redrawAll(app):
+    pil_image = Image.fromarray(app.image)
+    image = CMUImage(pil_image)
+    drawImage(image, 0, 0)
+    if app.face is not None:
+        for i in range(len(app.face)): #Face
+            # leftEye = []
+            # rightEye = []
+            for j in range(len(app.face[0])): #Point
+                x, y = int(app.face[i][j][0]), int(app.face[i][j][1])
+                drawCircle(x, y, 10, fill = 'white')
+                drawLabel(str(j), x, y)
+            # for a in range(36, 42):
+            #     x, y = int(app.face[i][a][0]), int(app.face[i][a][1])
+            #     leftEye.extend([x, y])
+            # for b in range(42, 48):
+            #     x, y = int(app.face[i][b][0]), int(app.face[i][b][1])
+            #     rightEye.extend([x, y])
+            # drawPolygon(*rightEye)
+            # drawPolygon(*leftEye)
+    if app.eyes is not []:
+        for i in range(len(app.eyes)):
+            leftPositon = app.eyes[i].getPositionLeft()[:-2]
+            leftWidth, leftHeight = app.eyes[i].getPositionLeft()[-2], app.eyes[i].getPositionLeft()[-1]
+            googlyEye = app.googlyEyes.resize((leftWidth, leftWidth))
+            draw = CMUImage(googlyEye)
+            drawImage(draw, *leftPositon, align = 'center')
+            rightPosition = app.eyes[i].getPositionRight()[:-2]
+            rightWidth, rightHeight = app.eyes[i].getPositionRight()[-2], app.eyes[i].getPositionRight()[-1]
+            googlyEye = app.googlyEyes.resize((rightWidth, rightWidth))
+            draw = CMUImage(googlyEye)
+            drawImage(draw, *rightPosition, align = 'center')
+            # drawCircle(*leftPositon)
+            # drawCircle(*rightPosition)
+
+def onStep(app):
+    app.step += 1
+    updateImage(app)
+    app.face = app.detector.detect(app.image)
+    app.eyes = []
+    for i in range(len(app.face)):
+        app.eyes.append(Eyes(app.face[i]))
+    if app.step % 100 == 0:
+        app.googlyEyes = Image.open('googly_blink.png')
+    elif app.step % 100 > 10:
+        app.googlyEyes = Image.open('googly_eye.png')
+
+
+def onKeyPress(app, key):
+    if key == 'q':
+        app.quit()
+
+def openStream(app):
+    app.video = cv2.VideoCapture(0)
+    if not app.video.isOpened():
+        app.quit()
+    app.width = int(app.video.get(cv2.CAP_PROP_FRAME_WIDTH))
+    app.height = int(app.video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+def updateImage(app):
+    success, image = app.video.read()
+    if not success:
+        app.quit()
+    image = cv2.flip(image, 1)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    app.image = image
+
+def main():
+    runApp()
+
+main()
